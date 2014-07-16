@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+
+import sys
+
+import argparse
+parser = argparse.ArgumentParser(
+  description = 'create client VPN certificate')
+parser.add_argument('name', metavar = 'NAME', type = str,
+                   help = 'client pretty name')
+parser.add_argument('commonName', metavar = 'COMMONNAME', type = str,
+                   help = 'client FQDN')
+args = parser.parse_args()
+
+with open('params.pickle', 'rb') as f:
+  import pickle
+  params = pickle.load(f)
+params['commonName'] = args.commonName
+params['name'] = args.name
+
+template = '''\
+[ req ]
+default_bits            = 2048
+default_md              = sha1
+encrypt_key             = no
+prompt                  = no
+string_mask             = utf8only
+distinguished_name      = client1_distinguished_name
+req_extensions          = req_cert_extensions
+# attributes              = req_attributes
+
+[ client1_distinguished_name ]
+countryName             = %(country)s
+localityName            = %(locality)s
+organizationName        = %(organization)s
+commonName              = %(commonName)s
+
+[ req_cert_extensions ]
+nsCertType              = client
+subjectAltName          = email:%(email)s
+'''
+
+import os
+try:
+  os.makedirs(args.name)
+except FileExistsError:
+  pass
+
+with open('%(name)s/%(name)s.cnf' % params, 'w') as f:
+  f.write(template % params)
+
+import subprocess
+subprocess.check_call(
+['openssl',
+ 'req', '-new', '-config', '%(name)s/%(name)s.cnf' % params,
+ '-keyout', '%(name)s/%(name)s.key' % params,
+ '-out', '%(name)s/%(name)s.req' % params])
+subprocess.check_call(
+  ['openssl',
+   'ca', '-config', 'ca/ca-sign.cnf',
+   '-out', '%(name)s/%(name)s.crt' % params,
+   '-in', '%(name)s/%(name)s.req' % params])
